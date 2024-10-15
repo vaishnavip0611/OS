@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPU Scheduling Simulator</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .gantt {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>CPU Scheduling Simulator</h1>
+<form id="processForm">
+    <label for="numProcesses">Number of Processes:</label>
+    <input type="number" id="numProcesses" min="1" required>
+    <button type="button" onclick="addProcesses()">Add Processes</button>
+</form>
+
+<div id="processInputs"></div>
+
+<button id="simulateBtn" style="display:none;" onclick="simulate()">Simulate</button>
+
+<div id="results" class="results"></div>
+
+<div id="ganttChart" class="gantt"></div>
+
+<script>
+    let processes = [];
+
+    function addProcesses() {
+        const numProcesses = document.getElementById('numProcesses').value;
+        let processInputs = '<h3>Enter Process Details</h3>';
+
+        for (let i = 0; i < numProcesses; i++) {
+            processInputs += `
+                <div>
+                    <h4>Process ${i + 1}</h4>
+                    <label for="arrivalTime${i}">Arrival Time:</label>
+                    <input type="number" id="arrivalTime${i}" required>
+                    <label for="burstTime${i}">Burst Time:</label>
+                    <input type="number" id="burstTime${i}" required>
+                    <label for="priority${i}">Priority:</label>
+                    <input type="number" id="priority${i}" required>
+                </div>
+            `;
+        }
+
+        document.getElementById('processInputs').innerHTML = processInputs;
+        document.getElementById('simulateBtn').style.display = 'block';
+    }
+
+    function simulate() {
+        const numProcesses = document.getElementById('numProcesses').value;
+        processes = [];
+
+        for (let i = 0; i < numProcesses; i++) {
+            const arrivalTime = parseInt(document.getElementById(`arrivalTime${i}`).value);
+            const burstTime = parseInt(document.getElementById(`burstTime${i}`).value);
+            const priority = parseInt(document.getElementById(`priority${i}`).value);
+            processes.push({ id: i + 1, arrivalTime, burstTime, priority });
+        }
+
+        FCFS();
+        SJF();
+        RoundRobin(2); // You can adjust the quantum value here
+        PriorityScheduling();
+    }
+
+    function FCFS() {
+        processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+        let currentTime = 0;
+        let results = '<h2>FCFS Scheduling</h2><table><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Waiting</th><th>Turnaround</th><th>Response</th></tr>';
+
+        processes.forEach(p => {
+            if (currentTime < p.arrivalTime) {
+                currentTime = p.arrivalTime;
+            }
+            p.waitingTime = currentTime - p.arrivalTime;
+            currentTime += p.burstTime;
+            p.turnaroundTime = p.waitingTime + p.burstTime;
+            p.responseTime = p.waitingTime;
+
+            results += `<tr><td>${p.id}</td><td>${p.arrivalTime}</td><td>${p.burstTime}</td><td>${p.waitingTime}</td><td>${p.turnaroundTime}</td><td>${p.responseTime}</td></tr>`;
+        });
+
+        results += '</table>';
+        document.getElementById('results').innerHTML += results;
+        printGanttChart(processes, currentTime, 'Gantt Chart (FCFS)');
+    }
+
+    function SJF() {
+        // Sort processes based on arrival time and then burst time
+        processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+        let currentTime = 0;
+        let results = '<h2>SJF Scheduling</h2><table><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Waiting</th><th>Turnaround</th><th>Response</th></tr>';
+        
+        let completed = [];
+        while (completed.length < processes.length) {
+            let shortest = null;
+            for (let p of processes) {
+                if (p.arrivalTime <= currentTime && !completed.includes(p)) {
+                    if (shortest == null || p.burstTime < shortest.burstTime) {
+                        shortest = p;
+                    }
+                }
+            }
+
+            if (shortest != null) {
+                shortest.waitingTime = currentTime - shortest.arrivalTime;
+                currentTime += shortest.burstTime;
+                shortest.turnaroundTime = shortest.waitingTime + shortest.burstTime;
+                shortest.responseTime = shortest.waitingTime;
+                completed.push(shortest);
+
+                results += `<tr><td>${shortest.id}</td><td>${shortest.arrivalTime}</td><td>${shortest.burstTime}</td><td>${shortest.waitingTime}</td><td>${shortest.turnaroundTime}</td><td>${shortest.responseTime}</td></tr>`;
+            } else {
+                currentTime++;
+            }
+        }
+
+        results += '</table>';
+        document.getElementById('results').innerHTML += results;
+        printGanttChart(completed, currentTime, 'Gantt Chart (SJF)');
+    }
+
+    function RoundRobin(quantum) {
+        let queue = [...processes];
+        let currentTime = 0;
+        let results = '<h2>Round Robin Scheduling</h2><table><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Waiting</th><th>Turnaround</th><th>Response</th></tr>';
+        
+        while (queue.length > 0) {
+            let p = queue.shift();
+            if (p.remainingTime > 0) {
+                if (currentTime < p.arrivalTime) {
+                    currentTime = p.arrivalTime;
+                }
+
+                if (p.remainingTime > quantum) {
+                    currentTime += quantum;
+                    p.remainingTime -= quantum;
+                    queue.push(p);
+                } else {
+                    currentTime += p.remainingTime;
+                    p.waitingTime = currentTime - p.arrivalTime - p.burstTime;
+                    p.turnaroundTime = p.waitingTime + p.burstTime;
+                    p.responseTime = p.waitingTime;
+                    p.remainingTime = 0;
+
+                    results += `<tr><td>${p.id}</td><td>${p.arrivalTime}</td><td>${p.burstTime}</td><td>${p.waitingTime}</td><td>${p.turnaroundTime}</td><td>${p.responseTime}</td></tr>`;
+                }
+            }
+        }
+
+        results += '</table>';
+        document.getElementById('results').innerHTML += results;
+        printGanttChart(processes, currentTime, 'Gantt Chart (Round Robin)');
+    }
+
+    function PriorityScheduling() {
+        processes.sort((a, b) => a.arrivalTime - b.arrivalTime);
+        let currentTime = 0;
+        let results = '<h2>Priority Scheduling</h2><table><tr><th>ID</th><th>Arrival</th><th>Burst</th><th>Waiting</th><th>Turnaround</th><th>Response</th></tr>';
+        
+        let completed = [];
+        while (completed.length < processes.length) {
+            let highestPriority = null;
+            for (let p of processes) {
+                if (p.arrivalTime <= currentTime && !completed.includes(p)) {
+                    if (highestPriority == null || p.priority < highestPriority.priority) {
+                        highestPriority = p;
+                    }
+                }
+            }
+
+            if (highestPriority != null) {
+                highestPriority.waitingTime = currentTime - highestPriority.arrivalTime;
+                currentTime += highestPriority.burstTime;
+                highestPriority.turnaroundTime = highestPriority.waitingTime + highestPriority.burstTime;
+                highestPriority.responseTime = highestPriority.waitingTime;
+                completed.push(highestPriority);
+
+                results += `<tr><td>${highestPriority.id}</td><td>${highestPriority.arrivalTime}</td><td>${highestPriority.burstTime}</td><td>${highestPriority.waitingTime}</td><td>${highestPriority.turnaroundTime}</td><td>${highestPriority.responseTime}</td></tr>`;
+            } else {
+                currentTime++;
+            }
+        }
+
+        results += '</table>';
+        document.getElementById('results').innerHTML += results;
+        printGanttChart(completed, currentTime, 'Gantt Chart (Priority)');
+    }
+
+    function printGanttChart(processes, totalTime, title) {
+        let ganttChart = `<h3>${title}</h3><div style="border: 1px solid black; width: ${totalTime * 20}px; height: 50px;">`;
+        let time = 0;
+
+        processes.forEach(p => {
+            ganttChart += `<div style="display: inline-block; width: ${p.burstTime * 20}px; background-color: lightblue;">${p.id}</div>`;
+            time += p.burstTime;
+        });
+        ganttChart += '</div>';
+        document.getElementById('ganttChart').innerHTML += ganttChart;
+    }
+</script>
+
+</body>
+</html>
